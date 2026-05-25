@@ -12,6 +12,11 @@ scp schema.sql user@vps:/tmp/
 psql -h localhost -U skippy_user -d skippy -f /tmp/schema.sql
 ```
 
+Wymagane minimum w SQL:
+- `CREATE SCHEMA IF NOT EXISTS skippy;`
+- tabela `skippy.whatsapp_users` do first-message onboardingu
+- indeks po `phone`
+
 ## Task 2: Profil Hermesa "skippy"
 
 ```bash
@@ -61,6 +66,28 @@ Stwórz workflow n8n:
 3. **Postgres node** — sprawdź daily_quota vs queries_used
 4. **IF** OK → UPSERT usage + HTTP POST do Hermesa API
 5. **IF** limit → odpowiedź "Wykorzystałaś limit na dziś"
+
+## Task 4a: First-message onboarding (obowiązkowe przed normalnym flow)
+
+Skrypt ma działać przed routingiem do głównego agenta.
+
+Runtime:
+- `/opt/data/profiles/skippy_plan/bin/first_message_onboarding.py`
+- `/opt/data/profiles/skippy_plan/bin/first_message_onboarding.sh`
+
+Wymagane statusy:
+- `NEED_NAME` — brak imienia, numer zapisany jako `pending`
+- `UPDATED_NAME` lub `CREATED` — imię zapisane
+- `FOUND` — numer już znany
+
+Smoke test:
+
+```bash
+docker exec hermes-agent sh -lc "/opt/data/profiles/skippy_plan/bin/first_message_onboarding.sh +48555111333 hej"
+docker exec hermes-agent sh -lc "/opt/data/profiles/skippy_plan/bin/first_message_onboarding.sh +48555111333 Ania"
+docker exec hermes-agent sh -lc "/opt/data/profiles/skippy_plan/bin/first_message_onboarding.sh +48555111333 'co mam dzisiaj'"
+docker exec beautyai-n8n-db sh -lc "psql -U n8n -d skippy -c \"SELECT phone, full_name, onboarding_status FROM skippy.whatsapp_users WHERE phone='+48555111333';\""
+```
 
 ## Task 5: Google OAuth landing page
 

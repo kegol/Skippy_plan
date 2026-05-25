@@ -37,6 +37,8 @@ Mama pisze voice/tekst na Twój WhatsApp numer
 **Plik:** `~/skippy/db/schema.sql`
 
 ```sql
+CREATE SCHEMA IF NOT EXISTS skippy;
+
 CREATE TABLE users (
     id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     phone                 TEXT UNIQUE NOT NULL,
@@ -61,6 +63,46 @@ CREATE TABLE user_usage (
 
 CREATE INDEX idx_users_phone ON users(phone);
 CREATE INDEX idx_user_usage_date ON user_usage(date);
+
+CREATE TABLE IF NOT EXISTS skippy.whatsapp_users (
+  id BIGSERIAL PRIMARY KEY,
+  phone TEXT UNIQUE NOT NULL,
+  full_name TEXT,
+  first_seen_at TIMESTAMP DEFAULT NOW(),
+  last_seen_at TIMESTAMP DEFAULT NOW(),
+  onboarding_status TEXT DEFAULT 'pending',
+  source TEXT DEFAULT 'whatsapp'
+);
+
+CREATE INDEX IF NOT EXISTS idx_whatsapp_users_phone ON skippy.whatsapp_users(phone);
+```
+
+### Baza produkcyjna (aktualny runtime)
+
+- Silnik: `beautyai-n8n-db` (PostgreSQL)
+- Baza: `skippy`
+- Schema: `skippy`
+- Tabela onboardingu pierwszej wiadomości: `skippy.whatsapp_users`
+
+### First Message Onboarding (wdrożone)
+
+Cel: pierwsza wiadomość z nieznanego numeru nie wpada od razu do normalnego flow zadań. Najpierw domykamy identyfikację użytkowniczki.
+
+Reguły:
+- Nieznany numer + brak imienia w treści: status `NEED_NAME`, rekord `pending`.
+- Ten sam numer + odpowiedź imieniem: status `UPDATED_NAME`, zapis `full_name` i `active`.
+- Znany numer z imieniem: status `FOUND` i normalny flow.
+
+Skrypty runtime (profil `skippy_plan`):
+- `/opt/data/profiles/skippy_plan/bin/first_message_onboarding.py`
+- `/opt/data/profiles/skippy_plan/bin/first_message_onboarding.sh`
+
+Przykład testowy:
+
+```bash
+docker exec hermes-agent sh -lc "/opt/data/profiles/skippy_plan/bin/first_message_onboarding.sh +48555111333 hej"
+docker exec hermes-agent sh -lc "/opt/data/profiles/skippy_plan/bin/first_message_onboarding.sh +48555111333 Ania"
+docker exec beautyai-n8n-db sh -lc "psql -U n8n -d skippy -c \"SELECT phone, full_name, onboarding_status FROM skippy.whatsapp_users WHERE phone='+48555111333';\""
 ```
 
 ## Task 2: Profil "skippy" — system prompt + STT/TTS
@@ -167,6 +209,15 @@ Webhook → Postgres (sprawdź daily_quota vs queries_used)
 ## Task 6: Google OAuth onboarding
 
 Landing page → Zaloguj Google → Podaj telefon → Zapisz w Postgres → Wyślij WhatsApp powitalny
+
+Aktualny runtime `skippy_plan`:
+- Po podaniu imienia bot automatycznie wysyła link autoryzacji Google.
+- Link prowadzi do Google z callbackiem na webhook n8n: `skippy/google/oauth/callback`.
+- Domknięcie tokenów dzieje się po stronie n8n (bez ręcznego wklejania URL przez użytkowniczkę).
+
+Stan incydentu (2026-05-25):
+- Dla bieżącego `client_id` Google zwraca `invalid_client` / `deleted_client`.
+- Do pełnego uruchomienia wymagane jest podpięcie nowego, aktywnego klienta OAuth Web i aktualizacja danych w runtime.
 
 ```python
 # Endpointy:
