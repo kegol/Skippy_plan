@@ -131,7 +131,23 @@ WHATSAPP_MODE=bot
 # brak innych platform — usunięte Discord/Telegram
 ```
 
-## Task 3: WhatsApp bridge (jednorazowo Dawid)
+## Task 3: Uruchomienie połączeń WhatsApp
+
+**Cel:** aktywować jedyny kanał komunikacji Skippy i zweryfikować pierwszy kontakt przez WhatsApp.
+
+**Sekwencja startowa:**
+1. Ustaw `WHATSAPP_ENABLED=true` i `WHATSAPP_MODE=bot` w profilu `skippy`.
+2. Uruchom bridge Hermesa dla profilu `skippy`.
+3. Zeskanuj QR i potwierdź, że bot numer jest online.
+4. Wyślij testową wiadomość tekstową z telefonu i potwierdź odpowiedź.
+5. Dopiero potem podłącz n8n rate limiter i Google Calendar flow.
+
+**Stan docelowy:**
+- tylko WhatsApp jako kanał wejścia/wyjścia,
+- brak Discord/Telegram,
+- odpowiedź tekstem, bez TTS.
+
+## Task 4: WhatsApp bridge (jednorazowo Dawid)
 
 ```bash
 find / -path "*/whatsapp-bridge/bridge.js" 2>/dev/null
@@ -142,13 +158,13 @@ hermes -p skippy whatsapp
 # Zeskanuj QR → bot numer gotowy na lata
 ```
 
-## Task 4: n8n rate limiter pipeline
+## Task 5: n8n rate limiter pipeline
 
 Webhook → Postgres (sprawdź daily_quota vs queries_used)
 → IF ok: UPSERT usage + POST do Hermesa API
 → IF limit: odpowiedź "Wykorzystałaś limit na dziś, wróć jutro"
 
-## Task 5: Google OAuth onboarding
+## Task 6: Google OAuth onboarding
 
 Landing page → Zaloguj Google → Podaj telefon → Zapisz w Postgres → Wyślij WhatsApp powitalny
 
@@ -160,7 +176,7 @@ GET /auth/google?state=<phone>
   → wyślij WhatsApp: "Konto Skippy aktywowane! 🎉 Wyślij coś do ogarnięcia!"
 ```
 
-## Task 6: Cron reminders
+## Task 7: Cron reminders
 
 ```bash
 # crontab -e — codziennie 7:00

@@ -15,6 +15,7 @@ To repo zawiera kompletną dokumentację produktu **Skippy** — od architektury
 | **[✅ Taski do wdrożenia](plans/tasks.md)** | Konkretne polecenia dla Copilota/Codexa |
 | **[🤖 System Prompt](prompts/system-prompt.md)** | System prompt dla profilu Hermesa + konfiguracja YAML |
 | **[🗄️ Schema bazy](db/schema.sql)** | PostgreSQL — users, user_usage, plans_config |
+| **[🌐 Landing page](index.html)** | Prosta strona "Skippy" pod domenę skippyplan.pl |
 
 ## 🎯 Produkt
 

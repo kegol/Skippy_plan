@@ -25,6 +25,18 @@ Hermes API (profil skippy)
 Odpowiedź tekstem → n8n → WhatsApp
 ```
 
+## Uruchomienie WhatsApp bridge
+
+Minimalna sekwencja startowa dla `skippy`:
+
+1. W profilu Hermesa ustaw `WHATSAPP_ENABLED=true`.
+2. Ustaw `WHATSAPP_MODE=bot`.
+3. Uruchom profil `skippy` i zainicjuj WhatsApp bridge.
+4. Zeskanuj QR z telefonu operatora.
+5. Zweryfikuj, że pierwszy testowy tekst z telefonu trafia do Hermesa i wraca jako odpowiedź tekstowa.
+
+Na tym etapie nie uruchamiamy innych kanałów komunikacji.
+
 ## Rate limiting
 
 | Plan | Dzienny limit | Mechanizm |

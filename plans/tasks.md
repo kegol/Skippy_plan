@@ -28,7 +28,14 @@ WHATSAPP_ENABLED=true
 WHATSAPP_MODE=bot
 ```
 
-## Task 3: WhatsApp bridge
+## Task 3: WhatsApp bridge i start połączeń
+
+**Cel:** uruchomić live połączenie WhatsApp dla profilu `skippy` zgodnie ze specyfikacją projektu.
+
+**Wymagany stan:**
+- `WHATSAPP_ENABLED=true`
+- `WHATSAPP_MODE=bot`
+- tylko WhatsApp, bez innych kanałów
 
 ```bash
 # Znajdź bridge
@@ -40,6 +47,11 @@ npm install
 hermes -p skippy whatsapp
 # Zeskanuj QR → bot gotowy
 ```
+
+**Procedura testowa:**
+1. Zaloguj bridge na WhatsApp.
+2. Wyślij testową wiadomość z telefonu.
+3. Potwierdź, że odpowiedź wraca przez Hermesa.
 
 ## Task 4: n8n rate limiter pipeline
 
