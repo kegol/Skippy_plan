@@ -2,6 +2,8 @@
 
 ## Przepływ wiadomości
 
+Szczegółowa, audytowalna specyfikacja pierwszych wiadomości: `docs/conversation-onboarding-spec.md`.
+
 ```
 Mama (WhatsApp)
     │ voice notka / tekst
@@ -12,6 +14,7 @@ n8n webhook
     │   ├─ Nieznany numer + brak imienia -> NEED_NAME
     │   ├─ Nieznany numer + imię -> CREATED
     │   └─ Znany numer -> FOUND
+    │   └─ Output do n8n: needs_name, needs_google_auth, auth_url, reply_text
     │
     ├─ Sprawdź usera (Postgres: phone)
     ├─ Rate limit (user_usage dzienny)
@@ -70,16 +73,14 @@ Reset: codziennie o 00:00 (CURRENT_DATE w PostgreSQL).
 - Token odświeżany cronem co 6 dni lub przy błędzie 401
 - Start autoryzacji jest wysyłany po onboardingu imienia, a callback tokenów jest domykany przez n8n: `skippy/google/oauth/callback`
 - Runtime helper `google_auth_link.sh` zwraca `AUTH_OK` albo `AUTH_REQUIRED_URL=...` i nie wymaga już ręcznego wklejania URL przez użytkowniczkę.
+- Numer wejściowy jest normalizowany do E.164 (`+48` dla 9-cyfrowych numerów PL), aby link autoryzacji był zawsze tworzony dla właściwej userki.
+- Odpowiedzi onboardingowe są celowo krótkie i operacyjne (bez opisu kroków wewnętrznych).
 
 ### Troubleshooting OAuth
 
-- Błąd `401 invalid_client` z Google może oznaczać usunięty klient OAuth (`deleted_client`).
-- Weryfikacja serwerowa (2026-05-25) zwróciła redirect do `authError=deleted_client` dla `client_id` używanego w runtime.
-- Rozwiązanie: utworzyć nowy klient OAuth 2.0 typu Web w Google Cloud i podmienić w runtime:
-    - `GOOGLE_CLIENT_ID`
-    - `GOOGLE_CLIENT_SECRET`
-    - `GOOGLE_REDIRECT_URI`
+- W przypadku błędu `401 invalid_client` sprawdź, czy runtime używa aktywnego klienta OAuth Web.
 - Redirect URI w Google musi być identyczny z callbackiem n8n, bez różnic w ścieżce/protokole.
+- Aktualny runtime (2026-05-25) działa na aktywnym kliencie i poprawnym callbacku.
 
 ## Przypomnienia poranne
 

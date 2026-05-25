@@ -10,6 +10,7 @@ To repo zawiera kompletną dokumentację produktu **Skippy** — od architektury
 |------|------|
 | **[📋 Plan budowy i rozwoju](docs/plan.md)** | Kompletny plan implementacji v4 — schema bazy, konfiguracja profilu, n8n pipeline, cennik |
 | **[🏗️ Architektura systemu](docs/architecture.md)** | Przepływ wiadomości, rate limiting, Google OAuth, cron reminders |
+| **[🧠 Specyfikacja startu rozmowy](docs/conversation-onboarding-spec.md)** | Dokładna logika onboardingu: stany, warunki, kontrakt JSON, testy akceptacyjne |
 | **[💰 System płatności](docs/payments.md)** | Stripe vs Autopay analiza + flow subskrypcji |
 | **[🗺️ Roadmapa](plans/roadmap.md)** | Fazy rozwoju: MVP → Beta → Produkcja → Skalowanie |
 | **[✅ Taski do wdrożenia](plans/tasks.md)** | Konkretne polecenia dla Copilota/Codexa |
