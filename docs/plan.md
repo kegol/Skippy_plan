@@ -88,6 +88,8 @@ CREATE INDEX IF NOT EXISTS idx_whatsapp_users_phone ON skippy.whatsapp_users(pho
 
 Cel: pierwsza wiadomość z nieznanego numeru nie wpada od razu do normalnego flow zadań. Najpierw domykamy identyfikację użytkowniczki.
 
+Pełna specyfikacja (audytowalna): `docs/conversation-onboarding-spec.md`.
+
 Reguły:
 - Nieznany numer + brak imienia w treści: status `NEED_NAME`, rekord `pending`.
 - Ten sam numer + odpowiedź imieniem: status `UPDATED_NAME`, zapis `full_name` i `active`.

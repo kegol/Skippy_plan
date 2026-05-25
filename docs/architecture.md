@@ -2,6 +2,8 @@
 
 ## Przepływ wiadomości
 
+Szczegółowa, audytowalna specyfikacja pierwszych wiadomości: `docs/conversation-onboarding-spec.md`.
+
 ```
 Mama (WhatsApp)
     │ voice notka / tekst
