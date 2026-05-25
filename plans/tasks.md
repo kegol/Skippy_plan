@@ -80,6 +80,16 @@ Wymagane statusy:
 - `UPDATED_NAME` lub `CREATED` — imię zapisane
 - `FOUND` — numer już znany
 
+Wymagane pola wyjściowe (dla routingu n8n):
+- `needs_name`
+- `needs_google_auth`
+- `auth_url` (gdy wymagane)
+- `reply_text` (krótka odpowiedź dla userki)
+
+Zasada UX:
+- Nie pytamy o numer telefonu w rozmowie (numer pochodzi z WhatsApp metadata).
+- Komunikaty mają być krótkie, bez tłumaczenia procesu wewnętrznego.
+
 Smoke test:
 
 ```bash

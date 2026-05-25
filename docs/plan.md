@@ -92,6 +92,8 @@ Reguły:
 - Nieznany numer + brak imienia w treści: status `NEED_NAME`, rekord `pending`.
 - Ten sam numer + odpowiedź imieniem: status `UPDATED_NAME`, zapis `full_name` i `active`.
 - Znany numer z imieniem: status `FOUND` i normalny flow.
+- Odpowiedzi do userki są krótkie i zadaniowe (bez komunikatów typu "co robię teraz").
+- Numer telefonu jest normalizowany do formatu E.164; dla PL 9-cyfrowy numer jest mapowany na `+48...`.
 
 Skrypty runtime (profil `skippy_plan`):
 - `/opt/data/profiles/skippy_plan/bin/first_message_onboarding.py`
@@ -214,10 +216,12 @@ Aktualny runtime `skippy_plan`:
 - Po podaniu imienia bot automatycznie wysyła link autoryzacji Google.
 - Link prowadzi do Google z callbackiem na webhook n8n: `skippy/google/oauth/callback`.
 - Domknięcie tokenów dzieje się po stronie n8n (bez ręcznego wklejania URL przez użytkowniczkę).
+- Skrypt onboardingowy zwraca pola sterujące dla n8n: `needs_name`, `needs_google_auth`, `auth_url`, `reply_text`.
+- Jeśli użytkowniczka ma już token (`AUTH_OK`), link nie jest ponownie wysyłany.
 
-Stan incydentu (2026-05-25):
-- Dla bieżącego `client_id` Google zwraca `invalid_client` / `deleted_client`.
-- Do pełnego uruchomienia wymagane jest podpięcie nowego, aktywnego klienta OAuth Web i aktualizacja danych w runtime.
+Status (2026-05-25):
+- Runtime OAuth działa z aktywnym klientem Web i callbackiem n8n.
+- Naprawiono generowanie linku autoryzacji dla numerów podawanych bez prefiksu `+48`.
 
 ```python
 # Endpointy:
