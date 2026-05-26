@@ -25,27 +25,45 @@ Skippy pomaga mamom zarządzać dniem przez WhatsApp:
 - **Lista zakupów** — agentmemory (bez zewnętrznych API)
 - **Notatki** — agentmemory
 - **Przypomnienia** — Postgres + cron 7:00
+- **Pamięć rodziny** — imiona dzieci, rytm dnia, stałe zajęcia, preferencje i nawyki
+- **Planowanie tygodnia** — w płatnych pakietach jako funkcja premium
 
-## 💰 Cennik
+## 💰 Model subskrypcyjny
 
-| Plan | Cena/mies. | Zapytania/dzień |
-|------|-----------|-----------------|
-| Basic | Darmowy | 5 |
-| Premium | 19 PLN | 50 |
-| Family | 29 PLN | 100 |
+Skippy nie jest wyceniany jako prosty bot do przypomnień, tylko jako rodzinny asystent organizacyjny przez WhatsApp. Cena musi pokrywać tokeny LLM, transkrypcję głosówek, serwer VPS, n8n, PostgreSQL, monitoring, utrzymanie WhatsApp bridge, rozwój produktu i realną obsługę użytkowniczek.
+
+| Plan | Cena/mies. | Charakter pakietu | Limit operacyjny |
+|------|-----------:|-------------------|------------------|
+| Free | 0 PLN | Test produktu i podstawowe przypomnienia | 5 wiadomości/dzień |
+| Beta Mama | 19 PLN | Cena promocyjna dla pierwszych testerek | limit jak Mama |
+| Mama | 29 PLN | Codzienna organizacja mamy | ok. 600–800 wiadomości/mies. |
+| Mama Plus | 49 PLN | Aktywne planowanie, pamięć i sugestie | ok. 1500 wiadomości/mies. |
+| Family | 79 PLN | Rodzinny organizator dla kilku osób | ok. 2500 wiadomości/mies. |
+
+### Zasada komunikacji limitów
+
+Na landing page i w komunikacji do użytkowniczek nie mówimy o tokenach, promptach ani kosztach AI. Zamiast tego stosujemy prosty komunikat:
+
+> W ramach pakietu obowiązuje rozsądny limit codziennego użycia, żeby Skippy działał szybko i stabilnie dla wszystkich.
+
+### Pozycjonowanie
+
+Nie sprzedajemy Skippy jako „bota do przypomnień za 19 zł”, tylko jako:
+
+> Osobistego asystenta rodzinnego przez WhatsApp, który pamięta rytm domu i odciąża mamę z codziennej organizacji.
 
 ## 🏗️ Stack technologiczny
 
 - **Komunikacja:** WhatsApp (Hermes + Baileys)
-- **AI:** DeepSeek v4 flash
+- **AI:** model przez API, startowo tani model flash; docelowo routing modeli zależnie od pakietu i typu zadania
 - **Backend:** Hermes + n8n + PostgreSQL
-- **STT:** Whisper tiny
+- **STT:** Whisper tiny / lokalna transkrypcja głosówek
 - **TTS:** Wyłączone (odpowiedź tekstem)
 - **Pamięć:** agentmemory namespaced per user
-- **Płatności:** Stripe (PESEL, działalność nierejestrowana)
+- **Płatności:** Stripe (PESEL, działalność nierejestrowana na start)
 
 ---
 
 **Autor:** Dawid Skwira  
-**Wersja:** v4 (2026-05)  
-**Status:** Gotowe do wdrożenia przez Copilota
+**Wersja:** v4.1 (2026-05)  
+**Status:** Dokumentacja produktowo-techniczna do wdrożenia przez Copilota/Codexa
