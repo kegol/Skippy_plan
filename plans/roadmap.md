@@ -1,47 +1,53 @@
 # Roadmapa Rozwoju Skippy
 
-## Faza 0: MVP (ten tydzień)
-- [x] Plan produktu v4
+## Faza 0: MVP
+- [x] Plan produktu
+- [x] Dokumentacja pakietów
 - [ ] PostgreSQL schema
-- [ ] Profil Hermesa "skippy" z system promptem
-- [ ] WhatsApp bridge (QR scan, bot mode)
-- [ ] n8n rate limiter pipeline
-- [ ] Google OAuth onboarding (landing page)
+- [ ] Profil Hermesa
+- [ ] WhatsApp bridge
+- [ ] n8n rate limiter
+- [ ] Google OAuth onboarding
 - [ ] Stripe Checkout + webhook
 
-## Faza 1: Beta (1-2 tygodnie)
-- [ ] Zaproszenie pierwszej mamy (test)
-- [ ] Debug voice → text → response flow
-- [ ] Poranne przypomnienia 7:00
-- [ ] Feature gating per plan
-- [ ] Agentmemory namespacing per user
+## Faza 1: Beta
+- [ ] 10–20 pierwszych mam
+- [ ] Test voice → tekst → odpowiedź
+- [ ] Poranne przypomnienia
+- [ ] Feature gating przez plans_config
+- [ ] Agentmemory namespaced per user
+- [ ] Pierwszy feedback UX
 
-## Faza 2: Rozszerzenie (3-4 tygodnie)
-- [ ] 10 pierwszych mam (beta testerki)
-- [ ] Lista zakupów (współdzielona)
-- [ ] Przypomnienia czasowe "odbior dziecka z przedszkola 15:30"
-- [ ] Feedback loop → poprawki UX
+## Faza 2: Rozszerzenie
+- [ ] 50 aktywnych użytkowniczek
+- [ ] Współdzielona lista zakupów
+- [ ] Powtarzalne rutyny
+- [ ] Sugestie zakupowe
+- [ ] Analiza zachowań użytkowniczek
 
-## Faza 3: Produkcja (miesiąc 2)
-- [ ] Weryfikacja WhatsApp Business (zwiększenie limitu)
-- [ ] Landing page skippy.app
-- [ ] Stripe Customer Portal (samodzielne zarządzanie subskrypcją)
-- [ ] 50 mam na pokładzie
+## Faza 3: Produkcja
+- [ ] WhatsApp Business / Meta
+- [ ] Stripe Customer Portal
+- [ ] Monitoring kosztów AI
+- [ ] 100 użytkowniczek
+- [ ] Dashboard administracyjny
 
-## Faza 4: Skalowanie (miesiąc 3+)
-- [ ] Własna domena WhatsApp Business
-- [ ] Rozszerzenie na Messenger (jeśli będzie popyt)
-- [ ] Aplikacja webowa (podgląd kalendarza)
-- [ ] Współdzielony kalendarz rodzinny
+## Faza 4: Skalowanie
+- [ ] Własna aplikacja webowa
+- [ ] Wspólny kalendarz rodzinny
 - [ ] Powiadomienia push
+- [ ] Inteligentne planowanie tygodnia
+- [ ] Segmentacja użytkowniczek
 
 ## KPI
 
-| Metryka | Cel (miesiąc 1) | Cel (miesiąc 3) |
-|---------|----------------|-----------------|
+| Metryka | Cel miesiąc 1 | Cel miesiąc 3 |
+|---------|---------------|---------------|
 | Liczba mam | 10 | 100 |
 | Retencja po trialu | 60% | 70% |
-| Zapytania/dzień/mama | 3 | 8 |
-| Koszt AI/mama/mies. | $0.20 | $0.15 |
-| MRR | 190 PLN | 2,000 PLN |
-| NPS | - | 40+ |
+| Średnia liczba wiadomości dziennie | 3 | 8 |
+| Koszt AI na użytkowniczkę | <1 PLN | <2 PLN |
+| ARPU | 29 PLN | 39–49 PLN |
+| MRR | 290 PLN | 3900–4900 PLN |
+| NPS | 30+ | 40+ |
+| Konwersja Free → płatne | 15% | 25% |
