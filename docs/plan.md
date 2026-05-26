@@ -1,273 +1,204 @@
-# Skippy — Finalny Plan v4
+# Skippy — Finalny Plan v4.1
 
-> Dla Copilota/Codexa. Jeden WhatsApp bot numer, mamy logują się przez Google.
-> Voice → tekst, odpowiedź tylko zadaniowa, zero gadania.
+> Dokumentacja produktowo-techniczna dla Copilota/Codexa. Jeden WhatsApp bot numer, użytkowniczki logują się przez Google, a dostęp do funkcji wynika z konfiguracji pakietu w PostgreSQL.
 
 ## Architektura
 
 ```
-Rejestracja: skippy.app → Google OAuth → podaj telefon → Postgres
+Rejestracja / pierwszy kontakt WhatsApp
                                ↓
-Mama pisze voice/tekst na Twój WhatsApp numer
+First Message Onboarding → Postgres
                                ↓
-                        n8n (rate limiter + Postgres)
+Google OAuth, jeśli funkcja kalendarza jest dostępna w planie
                                ↓
-              Hermes OGARNIAM (jeden profil)
-              agentmemory namespaced per user
-              STT: voice → tekst (Whisper tiny)
-              TTS: WYŁĄCZONY (odpowiedź tekstem)
+Mama pisze voice/tekst na numer Skippy
                                ↓
-              Google Calendar (per-user token)
+n8n: identyfikacja userki, plan, limity, usage, feature flags
+                               ↓
+Hermes: profil skippy + agentmemory namespaced per phone
+                               ↓
+Google Calendar / lista zakupów / przypomnienia / pamięć
+                               ↓
+Odpowiedź tekstem przez WhatsApp
 ```
+
+## Pozycjonowanie produktu
+
+Skippy nie jest prostym botem do przypomnień. To osobisty asystent rodzinny przez WhatsApp, który z czasem uczy się rytmu domu, dzieci, stałych zajęć, zakupów i codziennych preferencji.
 
 ## Wymagania serwera
 
-**MINIMUM (do 50 mam):**
+**Minimum do MVP i pierwszych testów:**
 - RAM: 4 GB
 - CPU: 2 vCPU
 - Dysk: 20 GB
 
-**REKOMENDOWANE (do 200 mam):**
+**Rekomendowane do pierwszych 100–200 użytkowniczek:**
 - RAM: 8 GB
 - CPU: 4 vCPU
 - Dysk: 40 GB NVMe
 
+Serwer musi utrzymać Hermesa, n8n, PostgreSQL, lokalne STT, webhooki, logi, backupy i monitoring. Koszt VPS jest częścią ekonomii subskrypcji.
+
+## Model pakietów
+
+| Plan | Cena | Cel | Limit operacyjny |
+|------|-----:|-----|------------------|
+| Free | 0 PLN | Test produktu | 5 wiadomości/dzień |
+| Beta Mama | 19 PLN | Promocja dla pierwszych testerek | jak Mama |
+| Mama | 29 PLN | Codzienna organizacja | ok. 600–800 wiadomości/mies. |
+| Mama Plus | 49 PLN | Planowanie, pamięć, sugestie | ok. 1500 wiadomości/mies. |
+| Family | 79 PLN | Organizacja całej rodziny | ok. 2500 wiadomości/mies. |
+
+Limity nie są komunikowane jako tokeny. Użytkowniczka widzi prosty komunikat o rozsądnym limicie użycia, aby Skippy działał szybko i stabilnie.
+
 ## Task 1: PostgreSQL schema
 
-**Plik:** `~/skippy/db/schema.sql`
+Źródłem prawdy jest `db/schema.sql`.
+
+Najważniejsze założenie: prompt nie decyduje samodzielnie o pakiecie. n8n pobiera konfigurację planu z `skippy.plans_config` i przekazuje Hermesowi tylko aktualny kontekst użytkowniczki.
+
+Kluczowe pola w `plans_config`:
 
 ```sql
-CREATE SCHEMA IF NOT EXISTS skippy;
-
-CREATE TABLE users (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    phone                 TEXT UNIQUE NOT NULL,
-    name                  TEXT,
-    email                 TEXT,
-    plan                  TEXT NOT NULL DEFAULT 'basic',
-    daily_quota           INT NOT NULL DEFAULT 20,
-    calendar_token        TEXT,
-    calendar_refresh_token TEXT,
-    calendar_email        TEXT,
-    onboarded             BOOLEAN DEFAULT FALSE,
-    created_at            TIMESTAMP DEFAULT NOW(),
-    updated_at            TIMESTAMP DEFAULT NOW()
-);
-
-CREATE TABLE user_usage (
-    user_id       UUID REFERENCES users(id),
-    date          DATE NOT NULL DEFAULT CURRENT_DATE,
-    queries_used  INT NOT NULL DEFAULT 0,
-    PRIMARY KEY (user_id, date)
-);
-
-CREATE INDEX idx_users_phone ON users(phone);
-CREATE INDEX idx_user_usage_date ON user_usage(date);
-
-CREATE TABLE IF NOT EXISTS skippy.whatsapp_users (
-  id BIGSERIAL PRIMARY KEY,
-  phone TEXT UNIQUE NOT NULL,
-  full_name TEXT,
-  first_seen_at TIMESTAMP DEFAULT NOW(),
-  last_seen_at TIMESTAMP DEFAULT NOW(),
-  onboarding_status TEXT DEFAULT 'pending',
-  source TEXT DEFAULT 'whatsapp'
-);
-
-CREATE INDEX IF NOT EXISTS idx_whatsapp_users_phone ON skippy.whatsapp_users(phone);
+plan_name
+monthly_price
+daily_message_limit
+monthly_message_limit
+voice_minutes_limit
+memory_days
+family_members_limit
+proactive_enabled
+calendar_enabled
+shopping_enabled
+shared_enabled
 ```
 
-### Baza produkcyjna (aktualny runtime)
+## Task 2: Profil Hermesa `skippy`
 
-- Silnik: `beautyai-n8n-db` (PostgreSQL)
-- Baza: `skippy`
-- Schema: `skippy`
-- Tabela onboardingu pierwszej wiadomości: `skippy.whatsapp_users`
+Profil Hermesa ma być bezpieczny, krótki i zadaniowy, ale nie może niszczyć relacji z użytkowniczką. Skippy może odpowiedzieć empatycznie, jeśli mama pisze o przeciążeniu, ale delikatnie wraca do organizacji.
 
-### First Message Onboarding (wdrożone)
+Zasady:
+- odpowiedzi krótkie,
+- brak logów i technicznych komunikatów,
+- brak nazw narzędzi,
+- brak opisu procesów wewnętrznych,
+- odpowiedź tekstem, bez TTS,
+- głosówki są wejściem, odpowiedzi są tekstem,
+- każdy numer telefonu ma własny namespace pamięci.
 
-Cel: pierwsza wiadomość z nieznanego numeru nie wpada od razu do normalnego flow zadań. Najpierw domykamy identyfikację użytkowniczki.
+## Task 3: WhatsApp bridge
 
-Pełna specyfikacja (audytowalna): `docs/conversation-onboarding-spec.md`.
-
-Reguły:
-- Nieznany numer + brak imienia w treści: status `NEED_NAME`, rekord `pending`.
-- Ten sam numer + odpowiedź imieniem: status `UPDATED_NAME`, zapis `full_name` i `active`.
-- Znany numer z imieniem: status `FOUND` i normalny flow.
-- Odpowiedzi do userki są krótkie i zadaniowe (bez komunikatów typu "co robię teraz").
-- Numer telefonu jest normalizowany do formatu E.164; dla PL 9-cyfrowy numer jest mapowany na `+48...`.
-
-Skrypty runtime (profil `skippy_plan`):
-- `/opt/data/profiles/skippy_plan/bin/first_message_onboarding.py`
-- `/opt/data/profiles/skippy_plan/bin/first_message_onboarding.sh`
-
-Przykład testowy:
-
-```bash
-docker exec hermes-agent sh -lc "/opt/data/profiles/skippy_plan/bin/first_message_onboarding.sh +48555111333 hej"
-docker exec hermes-agent sh -lc "/opt/data/profiles/skippy_plan/bin/first_message_onboarding.sh +48555111333 Ania"
-docker exec beautyai-n8n-db sh -lc "psql -U n8n -d skippy -c \"SELECT phone, full_name, onboarding_status FROM skippy.whatsapp_users WHERE phone='+48555111333';\""
-```
-
-## Task 2: Profil "skippy" — system prompt + STT/TTS
-
-```bash
-hermes profile create skippy --clone
-```
-
-**`~/.hermes/profiles/skippy/config.yaml`:**
-
-```yaml
-agent:
-  disabled_toolsets:
-    - terminal
-    - git
-
-system_prompt: |
-  Jesteś "Skippy" — asystentką do zadań, a nie do rozmowy.
-
-  TWOJA ROLA: planowanie, zarządzanie kalendarzem, lista zakupów,
-  przypomnienia. Nic więcej.
-
-  ZASADY:
-  1. Jeśli mama prosi o zadanie (event, zakupy, przypomnienie) — wykonaj.
-  2. Jeśli mama pyta "co mam dziś" — odczytaj kalendarz i podsumuj.
-  3. Jeśli mama mówi COKOLWIEK spoza twoich funkcji (pogoda, polityka,
-     dowcipy, rozmowa towarzyska) — odpowiedz krótko i zamknij temat:
-     "Jestem asystentką do zadań, nie do rozmowy. Powiedz co mam ogarnąć 😊"
-  4. Odpowiadaj po polsku, zwięźle, ciepło ale rzeczowo.
-  5. Jeśli funkcja spoza planu userki — poinformuj o wyższym pakiecie.
-
-  SYSTEM:
-  - Każda użytkowniczka ma własny namespace w agentmemory.
-  - Numer telefonu = klucz do jej danych, historii i preferencji.
-  - Przechowuj w pamięci: dzieci, preferencje, plan, Google Calendar token,
-    częste wydarzenia, nawyki.
-  - Nigdy nie mieszaj kontekstu między userkami.
-
-stt:
-  enabled: true
-  provider: local
-  local:
-    model: tiny             # tiny = szybciej + mniej RAM, kosztem minimalnej dokładności
-
-tts:
-  enabled: false            # WYŁĄCZONE — głos tylko w jedną stronę (mama→nas)
-
-voice:
-  auto_tts: false           # odpowiedzi tekstem, nie głosem
-
-whatsapp:
-  dm_policy: allow
-  group_policy: disabled
-
-mcp_servers:
-  agentmemory:
-    command: npx
-    args: ["-y", "@agentmemory/mcp"]
-
-memory:
-  provider: agentmemory
-```
-
-**.env profilu:**
-```bash
-WHATSAPP_ENABLED=true
-WHATSAPP_MODE=bot
-# brak innych platform — usunięte Discord/Telegram
-```
-
-## Task 3: Uruchomienie połączeń WhatsApp
-
-**Cel:** aktywować jedyny kanał komunikacji Skippy i zweryfikować pierwszy kontakt przez WhatsApp.
-
-**Sekwencja startowa:**
-1. Ustaw `WHATSAPP_ENABLED=true` i `WHATSAPP_MODE=bot` w profilu `skippy`.
-2. Uruchom bridge Hermesa dla profilu `skippy`.
-3. Zeskanuj QR i potwierdź, że bot numer jest online.
-4. Wyślij testową wiadomość tekstową z telefonu i potwierdź odpowiedź.
-5. Dopiero potem podłącz n8n rate limiter i Google Calendar flow.
-
-**Stan docelowy:**
+Stan docelowy:
 - tylko WhatsApp jako kanał wejścia/wyjścia,
 - brak Discord/Telegram,
-- odpowiedź tekstem, bez TTS.
+- odpowiedzi tekstowe,
+- jeden numer botowy na start,
+- przed skalowaniem wymagane przejście na stabilniejszą konfigurację WhatsApp Business / Meta.
 
-## Task 4: WhatsApp bridge (jednorazowo Dawid)
+## Task 4: Onboarding pierwszej wiadomości
 
-```bash
-find / -path "*/whatsapp-bridge/bridge.js" 2>/dev/null
-cd $(dirname $(find / -path "*/whatsapp-bridge/bridge.js" 2>/dev/null | head -1))
-npm install
+Cel: pierwsza wiadomość z nieznanego numeru nie trafia od razu do normalnego flow zadań. Najpierw ustalamy imię i zapisujemy użytkowniczkę.
 
-hermes -p skippy whatsapp
-# Zeskanuj QR → bot numer gotowy na lata
-```
+Reguły:
+- nieznany numer + brak imienia: `NEED_NAME`, rekord `pending`, krótka prośba o imię,
+- ten sam numer + odpowiedź imieniem: zapis `full_name`, status `active`,
+- znany numer: normalny flow,
+- numer telefonu normalizowany do E.164,
+- brak pytania o numer telefonu w rozmowie, jeśli numer jest już znany z WhatsApp.
 
-## Task 5: n8n rate limiter pipeline
+## Task 5: n8n rate limiter i feature gating
 
-Webhook → Postgres (sprawdź daily_quota vs queries_used)
-→ IF ok: UPSERT usage + POST do Hermesa API
-→ IF limit: odpowiedź "Wykorzystałaś limit na dziś, wróć jutro"
+n8n jest warstwą kontroli kosztów.
+
+Flow:
+1. Odbierz wiadomość.
+2. Znormalizuj numer telefonu.
+3. Pobierz użytkowniczkę z `skippy.users`.
+4. Pobierz plan z `skippy.plans_config`.
+5. Sprawdź dzienny i miesięczny limit wiadomości.
+6. Jeśli voice: sprawdź miesięczny limit minut głosówek.
+7. Jeśli funkcja nie jest dostępna w planie: zwróć krótką informację o możliwości rozszerzenia pakietu.
+8. Jeśli limit OK: zapisz usage i przekaż do Hermesa.
+9. Hermes otrzymuje tylko potrzebny kontekst: plan, dostępne funkcje, memory_days, proactive_enabled.
 
 ## Task 6: Google OAuth onboarding
 
-Landing page → Zaloguj Google → Podaj telefon → Zapisz w Postgres → Wyślij WhatsApp powitalny
+Google OAuth jest wymagany tylko wtedy, gdy użytkowniczka korzysta z funkcji kalendarza.
 
-Aktualny runtime `skippy_plan`:
-- Po podaniu imienia bot automatycznie wysyła link autoryzacji Google.
-- Link prowadzi do Google z callbackiem na webhook n8n: `skippy/google/oauth/callback`.
-- Domknięcie tokenów dzieje się po stronie n8n (bez ręcznego wklejania URL przez użytkowniczkę).
-- Skrypt onboardingowy zwraca pola sterujące dla n8n: `needs_name`, `needs_google_auth`, `auth_url`, `reply_text`.
-- Jeśli użytkowniczka ma już token (`AUTH_OK`), link nie jest ponownie wysyłany.
+Flow:
+1. Użytkowniczka przechodzi onboarding.
+2. n8n sprawdza, czy plan ma `calendar_enabled = TRUE`.
+3. Jeśli tak, Skippy wysyła krótki link autoryzacji Google.
+4. Callback n8n zapisuje token i refresh token.
+5. Po poprawnej autoryzacji Skippy wysyła krótkie potwierdzenie.
 
-Status (2026-05-25):
-- Runtime OAuth działa z aktywnym klientem Web i callbackiem n8n.
-- Naprawiono generowanie linku autoryzacji dla numerów podawanych bez prefiksu `+48`.
+Nie wymagamy ręcznego wklejania URL przez użytkowniczkę.
 
-```python
-# Endpointy:
-GET /auth/google?state=<phone>
-  → Google OAuth (offline, scope: calendar.events)
-  → callback: zapisz token + refresh_token
-  → wyślij WhatsApp: "Konto Skippy aktywowane! 🎉 Wyślij coś do ogarnięcia!"
+## Task 7: Przypomnienia poranne
+
+Cron `0 7 * * *` → n8n webhook.
+
+Workflow:
+1. Pobierz aktywne użytkowniczki z planem, który ma `calendar_enabled = TRUE`.
+2. Sprawdź, czy plan ma dostęp do porannego podsumowania.
+3. Pobierz wydarzenia z Google Calendar.
+4. Wyślij krótkie podsumowanie dnia przez WhatsApp.
+
+Przykład:
+
+```txt
+Dzień dobry Aniu. Dziś: pediatra 15:00 i zakupy po pracy. Chcesz, żebym przypomniała godzinę wcześniej?
 ```
 
-## Task 7: Cron reminders
+## Task 8: Pamięć i personalizacja
 
-```bash
-# crontab -e — codziennie 7:00
-0 7 * * * curl -s -X POST https://n8n.local/webhook/skippy-daily-reminder
-```
+Pamięć nie jest nielimitowana. Zakres pamięci wynika z planu:
+- Free: krótka pamięć testowa,
+- Mama: podstawowe preferencje i rytm dnia,
+- Mama Plus: dłuższa pamięć, rutyny i sugestie,
+- Family: pamięć rodzinna, kilku domowników i wspólne zadania.
 
-Workflow: userki premium/family → Google Calendar (wydarzenia dziś) → WhatsApp:
-```
-"☀️ Dzień dobry {name}! Dziś: wizyta u pediatry 15:00, zakupy 17:00. Miłego dnia!"
-```
+Przechowujemy tylko informacje potrzebne do organizacji:
+- imiona dzieci,
+- stałe zajęcia,
+- preferencje zakupowe,
+- cykliczne obowiązki,
+- ważne daty,
+- typowe godziny i rutyny.
 
-## Task 7: Feature gating przez plan
+## Task 9: Kontrola kosztów
 
-agentmemory usera przechowuje plan. System prompt regułuje:
-- basic: tylko kalendarz
-- premium: kalendarz + zakupy
-- family: wszystko + współdzielony
+Kontrola kosztów jest obowiązkowa od MVP.
+
+Mierzymy:
+- liczba wiadomości dziennie i miesięcznie,
+- liczba minut voice,
+- liczba zapytań do LLM,
+- średni koszt AI na użytkowniczkę,
+- średni koszt infrastruktury na użytkowniczkę,
+- wykorzystanie limitów,
+- liczba przekroczeń limitu,
+- liczba upgrade'ów po przekroczeniu limitu.
 
 ## Oczekiwane opóźnienia
 
 | Scenariusz | Czas |
 |------------|------|
-| Tekst → odpowiedź | **~5-8s** |
-| Voice 20s → Whisper tiny → tekst → odpowiedź | **~7-10s** |
-| Voice 60s → Whisper tiny → tekst → odpowiedź | **~10-15s** |
+| Tekst → odpowiedź | ~5–8s |
+| Voice 20s → STT → odpowiedź | ~7–10s |
+| Voice 60s → STT → odpowiedź | ~10–15s |
 
-Największy wpływ: model Whisper tiny (oszczędza ~3s vs base) i wyłączony TTS.
+Największy wpływ na opóźnienie mają STT, model LLM, długość kontekstu i liczba wywołań narzędzi.
 
-## ⚠️ Pułapki
+## Pułapki
 
-| Problem | Rozwiązanie |
-|---------|-------------|
-| Whisper nadal za wolny | Zmień na Groq Whisper API (free tier, ~1s) — wymaga GROQ_API_KEY |
-| Mama próbuje gadać | System prompt tnie. Po 3 off-topicach agentmemory zapamiętuje i tnie ostrzej. |
-| Token Google wygasa | Użyj refresh_token (offline access), odświeżaj cronem co 6 dni |
-| WhatsApp blokada | ~250 msg/dzień. 50 mam × 5 msg = 250. Limit na styk. Po beta — zweryfikuj numer przez Meta. |
-| agentmemory nie działa | Node >=18, `npx -y @agentmemory/mcp` |
+| Problem | Ryzyko | Rozwiązanie |
+|---------|--------|-------------|
+| Za tanie pakiety | Brak marży na rozwój | Pakiety 29/49/79 PLN i kontrola usage |
+| Zbyt duży Free | Użytkowniczki nie konwertują | Free tylko jako test produktu |
+| Zbyt agresywny prompt | Skippy brzmi jak automat | Krótko, ale empatycznie |
+| Brak kontroli voice | Głosówki zjadają zasoby | `voice_minutes_limit` per plan |
+| Limity tylko dzienne | Aktywne userki generują duży koszt | dzienny + miesięczny limit |
+| Prompt steruje pakietami | Chaos i trudny rozwój | plan i feature flags z Postgres |
+| WhatsApp blokada | Ryzyko przy skali | Meta/WhatsApp Business przed produkcją |
