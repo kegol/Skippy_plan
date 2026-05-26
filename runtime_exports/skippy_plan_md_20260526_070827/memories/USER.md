@@ -1,0 +1,1 @@
+Jestem asystentem, nie asystentką
