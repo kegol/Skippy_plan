@@ -1,36 +1,98 @@
 # Architektura Skippy
 
-## Przepływ wiadomości
+## Cel architektury
 
-Szczegółowa, audytowalna specyfikacja pierwszych wiadomości: `docs/conversation-onboarding-spec.md`.
+Skippy ma być osobistym asystentem rodzinnym przez WhatsApp, a nie prostym chatbotem. Architektura musi jednocześnie zapewnić wygodne użycie, izolację danych użytkowniczek, kontrolę kosztów AI oraz możliwość skalowania pakietów subskrypcyjnych.
+
+## Przepływ wiadomości
 
 ```
 Mama (WhatsApp)
-    │ voice notka / tekst
+    │ tekst / głosówka
     ▼
 n8n webhook
     │
-    ├─ First message onboarding (Postgres: skippy.whatsapp_users)
-    │   ├─ Nieznany numer + brak imienia -> NEED_NAME
-    │   ├─ Nieznany numer + imię -> CREATED
-    │   └─ Znany numer -> FOUND
-    │   └─ Output do n8n: needs_name, needs_google_auth, auth_url, reply_text
+    ├─ normalizacja numeru telefonu do E.164
+    ├─ First Message Onboarding
+    │   ├─ nieznany numer + brak imienia -> NEED_NAME
+    │   ├─ nieznany numer + imię -> CREATED / ACTIVE
+    │   └─ znany numer -> FOUND
     │
-    ├─ Sprawdź usera (Postgres: phone)
-    ├─ Rate limit (user_usage dzienny)
-    │   ├─ OK → kontynuuj
-    │   └─ LIMIT → "Wykorzystałaś limit na dziś"
-    │
-    ├─ STT (jeśli voice) → Whisper tiny
+    ├─ pobranie userki z PostgreSQL
+    ├─ pobranie planu z skippy.plans_config
+    ├─ kontrola limitów dziennych i miesięcznych
+    ├─ kontrola limitu minut voice
+    ├─ feature gating na podstawie flags z planu
+    ├─ STT, jeśli wejściem jest głosówka
     │
     ▼
 Hermes API (profil skippy)
     │
-    ├─ agentmemory (namespaced per phone)
-    ├─ Google Calendar API (per-user token)
+    ├─ agentmemory namespaced per phone
+    ├─ Google Calendar API, jeśli calendar_enabled = TRUE
+    ├─ lista zakupów, jeśli shopping_enabled = TRUE
+    ├─ współdzielone funkcje, jeśli shared_enabled = TRUE
     │
     ▼
 Odpowiedź tekstem → n8n → WhatsApp
+```
+
+## Źródło prawdy o pakietach
+
+Źródłem prawdy nie jest prompt, tylko PostgreSQL.
+
+Tabela `skippy.plans_config` przechowuje:
+
+```sql
+plan_name
+monthly_price
+daily_message_limit
+monthly_message_limit
+voice_minutes_limit
+memory_days
+family_members_limit
+proactive_enabled
+calendar_enabled
+shopping_enabled
+shared_enabled
+```
+
+n8n pobiera konfigurację pakietu i przekazuje Hermesowi tylko aktualny kontekst użytkowniczki:
+- nazwa planu,
+- dostępne funkcje,
+- limity,
+- zakres pamięci,
+- czy można działać proaktywnie.
+
+Hermes nie powinien samodzielnie interpretować cennika ani decydować, co jest dostępne w pakiecie.
+
+## Pakiety
+
+| Plan | Cena | Główna rola |
+|------|-----:|-------------|
+| Free | 0 PLN | Test produktu i podstawowe użycie |
+| Beta Mama | 19 PLN | Promocja dla pierwszych testerek |
+| Mama | 29 PLN | Codzienna organizacja |
+| Mama Plus | 49 PLN | Planowanie, pamięć i sugestie |
+| Family | 79 PLN | Organizacja rodziny i współdzielenie |
+
+## Rate limiting i kontrola kosztów
+
+Kontrola kosztów odbywa się przed wysłaniem wiadomości do Hermesa.
+
+Mechanizm:
+1. `user_usage_daily` albo dzienny zapis w `user_usage` kontroluje limit dzienny.
+2. Miesięczne usage kontroluje realny koszt aktywnych użytkowniczek.
+3. Voice ma osobny limit minut, bo głosówki obciążają STT i serwer.
+4. Długi kontekst i pamięć są ograniczane przez `memory_days`.
+5. Proaktywność jest dostępna tylko tam, gdzie `proactive_enabled = TRUE`.
+
+Komunikat dla użytkowniczki po przekroczeniu limitu powinien być prosty, bez słów „tokeny” i bez technicznego języka.
+
+Przykład:
+
+```txt
+Dzisiaj wykorzystałaś już dostępny limit w swoim pakiecie. Możesz wrócić jutro albo rozszerzyć plan, jeśli chcesz korzystać częściej.
 ```
 
 ## Baza danych runtime
@@ -38,13 +100,16 @@ Odpowiedź tekstem → n8n → WhatsApp
 - Kontener: `beautyai-n8n-db`
 - Baza: `skippy`
 - Schema: `skippy`
-- Tabele onboardingowe:
-    - `skippy.whatsapp_users` (mapowanie numer ↔ imię + status onboardingu)
-    - `skippy.google_oauth_tokens` (tokeny Google OAuth pod użytkowniczki)
+- Tabele kluczowe:
+    - `skippy.users`
+    - `skippy.whatsapp_users`
+    - `skippy.google_oauth_tokens`
+    - `skippy.user_usage`
+    - `skippy.plans_config`
 
 Wniosek architektoniczny: n8n i Hermes korzystają z jednego silnika Postgres, ale logika Skippy jest izolowana przez osobną bazę i schemat.
 
-## Uruchomienie WhatsApp bridge
+## WhatsApp bridge
 
 Minimalna sekwencja startowa dla `skippy`:
 
@@ -54,48 +119,40 @@ Minimalna sekwencja startowa dla `skippy`:
 4. Zeskanuj QR z telefonu operatora.
 5. Zweryfikuj, że pierwszy testowy tekst z telefonu trafia do Hermesa i wraca jako odpowiedź tekstowa.
 
-Na tym etapie nie uruchamiamy innych kanałów komunikacji.
-
-## Rate limiting
-
-| Plan | Dzienny limit | Mechanizm |
-|------|--------------|-----------|
-| Basic | 5 | UPSERT user_usage, SELECT count |
-| Premium | 50 | j.w. |
-| Family | 100 | j.w. |
-
-Reset: codziennie o 00:00 (CURRENT_DATE w PostgreSQL).
+Na etapie MVP używamy jednego numeru botowego. Przed skalowaniem produkcyjnym konieczna jest stabilniejsza konfiguracja WhatsApp Business / Meta.
 
 ## Google OAuth
 
 - Scope: `https://www.googleapis.com/auth/calendar.events`
-- Access type: `offline` (żeby dostać refresh_token)
-- Token odświeżany cronem co 6 dni lub przy błędzie 401
-- Start autoryzacji jest wysyłany po onboardingu imienia, a callback tokenów jest domykany przez n8n: `skippy/google/oauth/callback`
-- Runtime helper `google_auth_link.sh` zwraca `AUTH_OK` albo `AUTH_REQUIRED_URL=...` i nie wymaga już ręcznego wklejania URL przez użytkowniczkę.
-- Numer wejściowy jest normalizowany do E.164 (`+48` dla 9-cyfrowych numerów PL), aby link autoryzacji był zawsze tworzony dla właściwej userki.
-- Odpowiedzi onboardingowe są celowo krótkie i operacyjne (bez opisu kroków wewnętrznych).
-
-### Troubleshooting OAuth
-
-- W przypadku błędu `401 invalid_client` sprawdź, czy runtime używa aktywnego klienta OAuth Web.
-- Redirect URI w Google musi być identyczny z callbackiem n8n, bez różnic w ścieżce/protokole.
-- Aktualny runtime (2026-05-25) działa na aktywnym kliencie i poprawnym callbacku.
+- Access type: `offline`
+- Token odświeżany cronem albo przy błędzie 401
+- Start autoryzacji jest wysyłany po onboardingu, jeśli plan ma `calendar_enabled = TRUE`
+- Callback tokenów jest domykany przez n8n: `skippy/google/oauth/callback`
+- Runtime helper `google_auth_link.sh` zwraca `AUTH_OK` albo `AUTH_REQUIRED_URL=...`
+- Numer wejściowy jest normalizowany do E.164
 
 ## Przypomnienia poranne
 
-Cron `0 7 * * *` → n8n webhook:
-1. Pobierz userki z planem premium/family z Postgres
-2. Dla każdej: Google Calendar API → wydarzenia dziś
-3. Wyślij WhatsApp przez Hermes API
+Cron `0 7 * * *` → n8n webhook.
+
+Workflow:
+1. Pobierz aktywne użytkowniczki.
+2. Sprawdź plan i feature flags.
+3. Jeśli `calendar_enabled = TRUE`, pobierz wydarzenia z Google Calendar.
+4. Jeśli plan pozwala na proaktywne działanie, dodaj krótką sugestię.
+5. Wyślij tekst przez WhatsApp.
 
 ## System płatności
 
-**Decyzja:** Stripe (start na PESEL, działalność nierejestrowana)
+- Stripe Checkout → webhook → n8n → Postgres
+- Stripe Customer Portal do zmian planu i anulowania subskrypcji
+- Trial może kończyć się downgradem do Free
+- Po nieudanej płatności działa okres karencji, opisany w `docs/payments.md`
 
-- Stripe Checkout → webhook → n8n → Postgres (plan = premium/family)
-- Trial 7 dni bez karty
-- Po trialu downgrade do basic (5 zapytań/dzień, tylko kalendarz)
-- Upgrade/downgrade/cancel przez Stripe Customer Portal
+## Zasady bezpieczeństwa i separacji danych
 
-Zobacz [payments.md](payments.md) po szczegóły.
+- Numer telefonu jest kluczem identyfikacyjnym użytkowniczki.
+- Każda użytkowniczka ma osobny namespace pamięci.
+- Hermes nie może mieszać kontekstu między użytkowniczkami.
+- Dane rodzinne są używane wyłącznie do organizacji zadań, kalendarza, zakupów i przypomnień.
+- Informacje techniczne nie są pokazywane użytkowniczce.
